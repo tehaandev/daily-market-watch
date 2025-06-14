@@ -1,0 +1,427 @@
+{
+  "name": "Daily Market Watch",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e52d8ba5-dabe-4cf7-85ed-7309bfc7c0cb",
+      "name": "Cron Trigger",
+      "type": "n8n-nodes-base.cron",
+      "position": [360, -60],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1vnPuQHmm3jLCoJEjSJupvwX2iW1e5PhVayeetxSbWeg",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vnPuQHmm3jLCoJEjSJupvwX2iW1e5PhVayeetxSbWeg/edit#gid=0"
+        },
+        "options": {}
+      },
+      "id": "4da95d9b-02ea-4986-be49-ccf2bf87f646",
+      "name": "Fetch Holdings (Google Sheets)",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [580, -60],
+      "typeVersion": 4.6,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1TQDZuPkde2XnYcj",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://www.cse.lk",
+        "options": {}
+      },
+      "id": "958b84fa-f9a8-4573-b228-ab1385e2169e",
+      "name": "Fetch CSE Index & Stocks",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [800, -60],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "functionCode": "const cheerio = require('cheerio');\nconst $ = cheerio.load(items[0].json.body);\n// ASPI & SL20\nconst aspiText = $('div.index-value:contains(ASPI)').text().trim();\nconst sl20Text = $('div.index-value:contains(SL20)').text().trim();\n// Holdings prices\nconst holdings = $json; // array of symbols from Google Sheets\nconst results = [];\nfor (const row of holdings) {\n  const url = `https://www.cse.lk/pages/company-profile/company-profile.component.html?symbol=${row.Symbol}`;\n  // placeholder: in real workflow, make HTTP request per symbol\n  results.push({ symbol: row.Symbol, price: null, change: null });\n}\nreturn [{ json: { aspi: aspiText, sl20: sl20Text, holdings: results } }];"
+      },
+      "id": "578a6526-1a9c-4bbb-b90a-6e8482204ff3",
+      "name": "Parse CSE Data",
+      "type": "n8n-nodes-base.function",
+      "position": [1020, -60],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "url": "https://www.cbsl.gov.lk/en/rates-and-indicators/exchange-rates",
+        "options": {}
+      },
+      "id": "1e874255-98c6-40d3-96fa-30d65c3547a3",
+      "name": "Fetch CBSL Forex",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1240, -60],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "functionCode": "const cheerio = require('cheerio');\nconst $ = cheerio.load(items[0].json.body);\n// Extract USD/LKR rate\nconst usdRow = $('table.exchange-rates tbody tr').filter((i, el) => $(el).find('td').first().text().trim() === 'USD').first();\nconst usdRate = usdRow.find('td').eq(2).text().trim();\nreturn [{ json: { usdLkr: usdRate } }];"
+      },
+      "id": "f0d6581d-977b-4af0-994a-3d2862dd88ed",
+      "name": "Parse CBSL Data",
+      "type": "n8n-nodes-base.function",
+      "position": [1460, -60],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "url": "https://www.cse.lk/rss/announcements.jsp,https://economynext.com/feed/,https://www.dailymirror.lk/rss/top_story/155,,https://www.adaderana.lk/rss.php",
+        "options": {}
+      },
+      "id": "36bdc162-a48e-471d-a8f5-1171f28ecfe1",
+      "name": "Fetch Global News (RSS)",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "position": [1680, -60],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "url": "https://finance.yahoo.com/rss/topstories",
+        "options": {}
+      },
+      "id": "82ee350e-50b8-4839-bd58-f998dbbb4e5d",
+      "name": "Fetch Oil Prices (RSS)",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1900, -60],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = {\n  date: new Date().toISOString().split('T')[0],\n  aspi: items[0].json.aspi,\n  sl20: items[0].json.sl20,\n  holdings: items[0].json.holdings,\n  usdLkr: items[1].json.usdLkr,\n  news: items[2].json.items.map(i => i.title),\n  oilFeed: items[3].json.body || null\n};\nreturn [{ json: data }];"
+      },
+      "id": "86151487-8e91-4001-ae11-88ce14b292f1",
+      "name": "Aggregate Data",
+      "type": "n8n-nodes-base.function",
+      "position": [2120, -60],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: JSON.parse(items[0].json.choices[0].text) }];"
+      },
+      "id": "b32287bc-9f61-44c6-a259-429a777637f3",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "position": [2716, -60],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "value": "2108e007-a078-8064-b46e-ea24527c646f",
+          "mode": "list",
+          "cachedResultName": "Daily Market Watch",
+          "cachedResultUrl": "https://www.notion.so/2108e007a0788064b46eea24527c646f"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Date|title",
+              "title": "=={{ $json.date }}"
+            },
+            {
+              "key": "Index Movement (ASPI/SL20)|rich_text",
+              "richText": true,
+              "text": {
+                "text": [
+                  {
+                    "text": "=ASPI {{$json.aspi}}, SL20 {{$json.sl20}}",
+                    "annotationUi": {}
+                  }
+                ]
+              }
+            },
+            {
+              "key": "Key News/Events|rich_text",
+              "richText": true,
+              "text": {
+                "text": [
+                  {
+                    "text": "={{ $json.BigNewsEvents }}",
+                    "annotationUi": {}
+                  }
+                ]
+              }
+            },
+            {
+              "key": "Portfolio|rich_text",
+              "richText": true,
+              "text": {
+                "text": [
+                  {
+                    "text": "={{ $json.HoldingsImpact }}",
+                    "annotationUi": {}
+                  }
+                ]
+              }
+            },
+            {
+              "key": "Global Macro|rich_text",
+              "richText": true,
+              "text": {
+                "text": [
+                  {
+                    "text": "={{ $json.GlobalMacro }}",
+                    "annotationUi": {}
+                  }
+                ]
+              }
+            },
+            {
+              "key": "AI Recommendations|rich_text",
+              "richText": true,
+              "text": {
+                "text": [
+                  {
+                    "text": "={{ $json.SuggestedAction }}",
+                    "annotationUi": {}
+                  }
+                ]
+              }
+            },
+            {
+              "key": "Market Sentiment|rich_text",
+              "textContent": "={{ $json.MarketMood }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b24e8b95-bde1-4b75-b779-abf0260da517",
+      "name": "Append to Notion",
+      "type": "n8n-nodes-base.notion",
+      "position": [2936, -60],
+      "typeVersion": 2.2,
+      "credentials": {
+        "notionApi": {
+          "id": "soni92ZX7loCkgCa",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-nano",
+          "mode": "id"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a Sri Lankan stock market analyst. Generate a daily market summary.\n\nData Provided:\n- ASPI Change: {{$json.aspi}}\n- SL20 Change: {{$json.sl20}}\n- Forex USD/LKR: {{$json.usdLkr}}\n- Oil Feed: {{JSON.stringify($json.oilFeed)}}\n- News Headlines: {{JSON.stringify($json.news)}}\n- Holdings: {{JSON.stringify($json.holdings)}}\n\nOutput JSON (strict format):\n{\n  \"BigNewsEvents\": \"...\",\n  \"GlobalMacro\": \"...\",\n  \"HoldingsImpact\": \"...\",\n  \"VolumeAnomalies\": \"Skipped in this version\",\n  \"SuggestedAction\": \"...\",\n  \"MarketMood\": \"...\"\n}",
+              "role": "system"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [2340, -60],
+      "id": "c8817587-bf3f-4782-92da-d02c45a54b6a",
+      "name": "OpenAI1",
+      "credentials": {
+        "openAiApi": {
+          "id": "NJfVAzn5HBnIw8k8",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "c77b11ca-f9f9-4e39-b69a-13e6806b6dd1",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [360, -260],
+      "id": "20e4e724-8b5c-447b-9df1-5b13a6c46cbd",
+      "name": "Webhook",
+      "webhookId": "c77b11ca-f9f9-4e39-b69a-13e6806b6dd1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [360, 140],
+      "id": "0d3b562f-4491-49ee-91c2-1f5e413fae63",
+      "name": "When clicking ‘Execute workflow’"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cron Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Holdings (Google Sheets)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Holdings (Google Sheets)": {
+      "main": [
+        [
+          {
+            "node": "Fetch CSE Index & Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CSE Index & Stocks": {
+      "main": [
+        [
+          {
+            "node": "Parse CSE Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse CSE Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch CBSL Forex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CBSL Forex": {
+      "main": [
+        [
+          {
+            "node": "Parse CBSL Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse CBSL Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Global News (RSS)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Global News (RSS)": {
+      "main": [
+        [
+          {
+            "node": "Fetch Oil Prices (RSS)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Oil Prices (RSS)": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Data": {
+      "main": [
+        [
+          {
+            "node": "OpenAI1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Append to Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI1": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Holdings (Google Sheets)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Fetch Holdings (Google Sheets)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ce392555-ba88-42c3-9494-da65c6bf530b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "497cbb3ab4ddc55308ff0a4cad9d09d999b26171f741900a39189aa096c024a9"
+  },
+  "id": "Uy0KDoO4byBx49M4",
+  "tags": []
+}
