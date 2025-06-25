@@ -1,0 +1,193 @@
+{
+  "name": "daily-cse-news-signal-agent",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 7,
+              "minute": 30
+            }
+          ]
+        }
+      },
+      "id": "1",
+      "name": "Cron Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.ft.lk/?format=rss",
+        "options": {}
+      },
+      "id": "2",
+      "name": "RSS DailyFT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [500, 100]
+    },
+    {
+      "parameters": {
+        "url": "https://www.mirror.lk/feed",
+        "options": {}
+      },
+      "id": "3",
+      "name": "RSS Mirror Business",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.economynext.com/feed",
+        "options": {}
+      },
+      "id": "4",
+      "name": "RSS EconomyNext",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [500, 500]
+    },
+    {
+      "parameters": {
+        "functionCode": "const parseRSS = (rssXml) => {\n  const items = [];\n  const parser = new DOMParser();\n  const doc = parser.parseFromString(rssXml, 'text/xml');\n  doc.querySelectorAll('item').forEach(item => {\n    items.push({\n      title: item.querySelector('title')?.textContent || '',\n      link: item.querySelector('link')?.textContent || '',\n      pubDate: item.querySelector('pubDate')?.textContent || '',\n      description: item.querySelector('description')?.textContent || ''\n    });\n  });\n  return items;\n};\n\nconst ftItems = parseRSS(items[0].json.body);\nconst mirrorItems = parseRSS(items[1].json.body);\nconst economyNextItems = parseRSS(items[2].json.body);\n\nreturn [\n  { json: { source: 'DailyFT', items: ftItems } },\n  { json: { source: 'Mirror Business', items: mirrorItems } },\n  { json: { source: 'EconomyNext', items: economyNextItems } }\n];"
+      },
+      "id": "5",
+      "name": "Parse RSS Feeds",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const combined = [];\nfor (const feed of items) {\n  const source = feed.json.source;\n  for (const article of feed.json.items) {\n    combined.push({\n      source,\n      title: article.title,\n      link: article.link,\n      pubDate: article.pubDate,\n      description: article.description\n    });\n}\n}\nreturn combined.map(item => ({ json: item }));"
+      },
+      "id": "6",
+      "name": "Combine Articles",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [950, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1
+      },
+      "id": "7",
+      "name": "Split Articles",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [1150, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "temperature": 0,
+        "maxTokens": 500,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "stop": ["}"],
+        "user": "tehaan",
+        "prompt": "You are a financial analyst focused on the Colombo Stock Exchange (CSE). Given a news article title and content, perform the following tasks:\n\n1. Extract all mentioned CSE stock tickers in the article. Use the format \"TICKER.N0000\" for each ticker. If no tickers are mentioned, respond \"NONE\".\n\n2. Identify the sector(s) affected by the article based on the tickers or content. Use these sectors only:\n   - BANKS\n   - DIVERSIFIED\n   - INSURANCE\n   - CAPITAL\n   - TELECOM\n   - ENERGY\n   - CONSUMER\n   - FOOD\n   - HEALTHCARE\n   - INDUSTRIALS\n   - REAL ESTATE\n   - TRANSPORT\n   - MATERIALS\n   - RETAIL\n   - HOTELS\n   - ICT\n   - AGRICULTURE\n\n3. Classify the primary news category (choose one): Earnings, Insider, Macro, General, Regulatory.\n\n4. Rate the relevance of this article to short-term investment decisions on a scale of 1 (lowest) to 5 (highest).\n\n5. Determine the overall sentiment toward the stock(s): Positive, Neutral, or Negative.\n\n6. Provide a concise plain-English summary of the article (1-2 sentences).\n\n---\n\nArticle title: \"\"\"{{$json[\"title\"]}}\"\"\"\n\nArticle content: \"\"\"{{$json[\"description\"]}}\"\"\"\n\n---\n\nRespond in JSON format exactly like this:\n\n{\n  \"tickers\": [\"TICKER1.N0000\", \"TICKER2.N0000\"],\n  \"sectors\": [\"SECTOR1\", \"SECTOR2\"],\n  \"category\": \"Earnings\",\n  \"relevance\": 4,\n  \"sentiment\": \"Positive\",\n  \"summary\": \"Short summary here.\"\n}"
+      },
+      "id": "8",
+      "name": "OpenAI Signal Extraction",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1350, 300]
+    }
+  ],
+  "connections": {
+    "1": {
+      "main": [
+        [
+          {
+            "node": "2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "3",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "4",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "2": {
+      "main": [
+        [
+          {
+            "node": "5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3": {
+      "main": [
+        [
+          {
+            "node": "5",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "4": {
+      "main": [
+        [
+          {
+            "node": "5",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "5": {
+      "main": [
+        [
+          {
+            "node": "6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6": {
+      "main": [
+        [
+          {
+            "node": "7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7": {
+      "main": [
+        [
+          {
+            "node": "8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
+

@@ -33,7 +33,8 @@
           "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vnPuQHmm3jLCoJEjSJupvwX2iW1e5PhVayeetxSbWeg/edit#gid=0"
         },
         "options": {
-          "cellFormat": "USER_ENTERED"
+          "cellFormat": "USER_ENTERED",
+          "useAppend": false
         }
       },
       "id": "4da95d9b-02ea-4986-be49-ccf2bf87f646",
@@ -51,9 +52,13 @@
     },
     {
       "parameters": {
-        "url": "https://www.cse.lk/pages/market-data/market-summery.component.html",
+        "url": "https://www.cse.lk",
         "options": {
-          "timeout": 15000
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 2
+          }
         }
       },
       "id": "958b84fa-f9a8-4573-b228-ab1385e2169e",
@@ -65,7 +70,24 @@
     },
     {
       "parameters": {
-        "functionCode": "// Get all inputs and determine data types\nconst allInputs = $input.all();\nlet holdingsData = [];\nlet cseHtml = '';\n\nconsole.log('Parse CSE Data - Number of inputs:', allInputs.length);\n\n// Process each input\nfor (let i = 0; i < allInputs.length; i++) {\n  const input = allInputs[i];\n  const data = input.json;\n  \n  console.log(`Input ${i}:`, typeof data, Array.isArray(data));\n  \n  // Holdings data (from Google Sheets)\n  if (Array.isArray(data)) {\n    holdingsData = data;\n    console.log('Found holdings data:', holdingsData.length, 'rows');\n    console.log('Sample holding:', holdingsData[0]);\n  }\n  // CSE HTML data (from HTTP request)\n  else if (data && (data.data || data.body)) {\n    cseHtml = data.data || data.body;\n    console.log('Found CSE HTML data, length:', cseHtml.length);\n  }\n  // Error case - node failed but continued\n  else if (data && data.error) {\n    console.log('Input contains error:', data.error);\n  }\n}\n\n// Process holdings data - fix column name mapping\nconst processedHoldings = [];\nif (Array.isArray(holdingsData)) {\n  for (const row of holdingsData) {\n    if (row && (row.Symbol || row.symbol)) {\n      processedHoldings.push({\n        symbol: row.Symbol || row.symbol,\n        price: 'Pending',\n        change: 'Pending',\n        quantity: row.Qty || row.qty || row.Quantity || row.quantity || 0,\n        purchasePrice: row.PP || row.pp || 0\n      });\n    }\n  }\n}\n\n// Parse CSE data for indices\nlet aspiText = 'N/A';\nlet sl20Text = 'N/A';\n\nif (cseHtml && typeof cseHtml === 'string') {\n  try {\n    // Enhanced regex patterns for ASPI and SL20\n    const aspiPatterns = [\n      /ASPI[^\\d]*([\\d,]+\\.?\\d*)/i,\n      /All Share Price Index[^\\d]*([\\d,]+\\.?\\d*)/i,\n      /\"aspi\"[^\\d]*([\\d,]+\\.?\\d*)/i\n    ];\n    \n    const sl20Patterns = [\n      /SL20[^\\d]*([\\d,]+\\.?\\d*)/i,\n      /S&P SL20[^\\d]*([\\d,]+\\.?\\d*)/i,\n      /\"sl20\"[^\\d]*([\\d,]+\\.?\\d*)/i\n    ];\n    \n    // Try ASPI patterns\n    for (const pattern of aspiPatterns) {\n      const match = cseHtml.match(pattern);\n      if (match) {\n        aspiText = match[1];\n        break;\n      }\n    }\n    \n    // Try SL20 patterns\n    for (const pattern of sl20Patterns) {\n      const match = cseHtml.match(pattern);\n      if (match) {\n        sl20Text = match[1];\n        break;\n      }\n    }\n    \n    console.log('Index extraction - ASPI:', aspiText, 'SL20:', sl20Text);\n  } catch (error) {\n    console.error('Error parsing CSE HTML:', error.message);\n  }\n}\n\nconst result = {\n  aspi: aspiText,\n  sl20: sl20Text,\n  holdings: processedHoldings,\n  debug: {\n    holdingsCount: processedHoldings.length,\n    cseDataLength: cseHtml.length,\n    inputCount: allInputs.length,\n    sampleHolding: processedHoldings[0]\n  }\n};\n\nconsole.log('Parse CSE Data result:', result);\nreturn [{ json: result }];"
+        "functionCode": "// Debug function to log Google Sheets data\nconst data = $input.first().json;\n\nconsole.log('Google Sheets data received:');\nconsole.log('Type:', typeof data);\nconsole.log('Is Array:', Array.isArray(data));\nconsole.log('Data preview:', JSON.stringify(data, null, 2));\n\n// Pass data through unchanged\nreturn [{ json: data }];"
+      },
+      "id": "debug-sheets-data",
+      "name": "Debug Sheets Data",
+      "type": "n8n-nodes-base.function",
+      "position": [620, -160],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "// Get input data from all connected nodes\nconst allInputs = $input.all();\nlet holdingsData = [];\nlet cseHtml = '';\n\n// Process inputs to extract holdings and CSE data\nfor (const input of allInputs) {\n  const data = input.json;\n  \n  // Check if this is holdings data (array with Symbol property)\n  if (Array.isArray(data)) {\n    holdingsData = data;\n  } else if (data && (data.data || data.body)) {\n    // This is the CSE HTML data\n    cseHtml = data.data || data.body;\n  } else if (typeof data === 'string') {\n    // Direct HTML string\n    cseHtml = data;\n  }\n}\n\n// If no CSE HTML data, return holdings with default values\nif (!cseHtml) {\n  console.log('No CSE HTML data received, using default values');\n  const processedHoldings = [];\n  if (Array.isArray(holdingsData)) {\n    for (const row of holdingsData) {\n      if (row && (row.Symbol || row.symbol)) {\n        processedHoldings.push({ \n          symbol: row.Symbol || row.symbol, \n          price: 'N/A', \n          change: 'N/A',\n          quantity: row.Quantity || row.quantity || 0\n        });\n      }\n    }\n  }\n  return [{ json: { \n    aspi: 'N/A', \n    sl20: 'N/A', \n    holdings: processedHoldings,\n    debug: 'No CSE data received'\n  } }];\n}\n\ntry {\n  // Parse CSE HTML for index values\n  let aspiText = 'N/A';\n  let sl20Text = 'N/A';\n  \n  // Simple text extraction for ASPI and SL20\n  const aspiMatch = cseHtml.match(/ASPI[^\\d]*(\\d+[.,]\\d+)/i);\n  const sl20Match = cseHtml.match(/SL20[^\\d]*(\\d+[.,]\\d+)/i);\n  \n  if (aspiMatch) {\n    aspiText = aspiMatch[1];\n  }\n  \n  if (sl20Match) {\n    sl20Text = sl20Match[1];\n  }\n  \n  // Process holdings data\n  const processedHoldings = [];\n  if (Array.isArray(holdingsData)) {\n    for (const row of holdingsData) {\n      if (row && (row.Symbol || row.symbol)) {\n        processedHoldings.push({ \n          symbol: row.Symbol || row.symbol, \n          price: 'Pending', \n          change: 'Pending',\n          quantity: row.Quantity || row.quantity || 0\n        });\n      }\n    }\n  }\n  \n  return [{ json: { \n    aspi: aspiText, \n    sl20: sl20Text, \n    holdings: processedHoldings,\n    debug: `Processed ${processedHoldings.length} holdings`\n  } }];\n  \n} catch (error) {\n  console.error('Error parsing CSE data:', error);\n  return [{ json: { \n    error: `Error parsing CSE data: ${error.message}`, \n    aspi: 'Error', \n    sl20: 'Error', \n    holdings: holdingsData || [],\n    debug: 'Parse error occurred'\n  } }];\n}"
+      },
+      "id": "578a6526-1a9c-4bbb-b90a-6e8482204ff3",
+      "name": "Parse CSE Data",
+      "type": "n8n-nodes-base.function",
+      "position": [1020, -60],
+      "typeVersion": 1
+    },
       },
       "id": "578a6526-1a9c-4bbb-b90a-6e8482204ff3",
       "name": "Parse CSE Data",
@@ -77,7 +99,11 @@
       "parameters": {
         "url": "https://www.cbsl.gov.lk/en/rates-and-indicators/exchange-rates",
         "options": {
-          "timeout": 15000
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 2
+          }
         }
       },
       "id": "1e874255-98c6-40d3-96fa-30d65c3547a3",
@@ -89,7 +115,7 @@
     },
     {
       "parameters": {
-        "functionCode": "// Get all inputs\nconst allInputs = $input.all();\nlet cseData = {};\nlet cbslHtml = '';\n\n// Process inputs\nfor (const input of allInputs) {\n  const data = input.json;\n  \n  // CSE data (has aspi, sl20, holdings)\n  if (data && (data.aspi !== undefined || data.sl20 !== undefined || data.holdings !== undefined)) {\n    cseData = data;\n  }\n  // CBSL HTML data\n  else if (data && (data.data || data.body)) {\n    cbslHtml = data.data || data.body;\n  }\n}\n\nlet usdRate = 'N/A';\n\nif (cbslHtml && typeof cbslHtml === 'string') {\n  try {\n    // Try regex patterns for USD rate\n    const usdPatterns = [\n      /USD[^\\d]*([\\d,]+\\.\\d+)/i,\n      /United States Dollar[^\\d]*([\\d,]+\\.\\d+)/i,\n      /US Dollar[^\\d]*([\\d,]+\\.\\d+)/i,\n      /(3[0-9]{2}\\.[0-9]{2})/g  // Direct pattern for 300-399.xx range\n    ];\n    \n    for (const pattern of usdPatterns) {\n      const match = cbslHtml.match(pattern);\n      if (match) {\n        usdRate = match[1];\n        break;\n      }\n    }\n  } catch (error) {\n    console.error('Error parsing CBSL data:', error.message);\n  }\n}\n\nconst result = {\n  ...cseData,\n  usdLkr: usdRate\n};\n\nreturn [{ json: result }];"
+        "functionCode": "// Get all inputs\nconst allInputs = $input.all();\nlet cseData = {};\nlet cbslHtml = '';\n\n// Process inputs\nfor (const input of allInputs) {\n  const data = input.json;\n  \n  // Check if this contains CSE data (has aspi, sl20, or holdings)\n  if (data && (data.aspi !== undefined || data.sl20 !== undefined || data.holdings !== undefined)) {\n    cseData = data;\n  } else if (data && (data.data || data.body)) {\n    // This is the CBSL HTML data\n    cbslHtml = data.data || data.body;\n  } else if (typeof data === 'string') {\n    // Direct HTML string\n    cbslHtml = data;\n  }\n}\n\n// If no CBSL HTML data, return CSE data with default USD rate\nif (!cbslHtml) {\n  console.log('No CBSL HTML data received, using default USD rate');\n  return [{ json: { ...cseData, usdLkr: 'N/A', debug: 'No CBSL data received' } }];\n}\n\ntry {\n  let usdRate = 'N/A';\n  \n  // Try simple regex pattern matching for USD rate\n  const usdPatterns = [\n    /USD[^\\d]*(\\d+\\.\\d+)/i,\n    /United States Dollar[^\\d]*(\\d+\\.\\d+)/i,\n    /US Dollar[^\\d]*(\\d+\\.\\d+)/i\n  ];\n  \n  for (const pattern of usdPatterns) {\n    const match = cbslHtml.match(pattern);\n    if (match) {\n      usdRate = match[1];\n      break;\n    }\n  }\n  \n  // If regex fails, try to find any number that looks like a USD/LKR rate (300-400 range)\n  if (usdRate === 'N/A') {\n    const rateMatch = cbslHtml.match(/(3[0-9]{2}\\.[0-9]{2})/g);\n    if (rateMatch && rateMatch.length > 0) {\n      usdRate = rateMatch[0];\n    }\n  }\n  \n  return [{ json: { \n    ...cseData, \n    usdLkr: usdRate,\n    debug: `USD rate extraction: ${usdRate !== 'N/A' ? 'successful' : 'failed'}`\n  } }];\n  \n} catch (error) {\n  console.error('Error parsing CBSL data:', error);\n  return [{ json: { \n    ...cseData, \n    usdLkr: `Error: ${error.message}`,\n    debug: 'CBSL parse error occurred'\n  } }];\n}"
       },
       "id": "f0d6581d-977b-4af0-994a-3d2862dd88ed",
       "name": "Parse CBSL Data",
@@ -113,7 +139,11 @@
       "parameters": {
         "url": "https://finance.yahoo.com/rss/topstories",
         "options": {
-          "timeout": 15000
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 2
+          }
         }
       },
       "id": "82ee350e-50b8-4839-bd58-f998dbbb4e5d",
@@ -125,7 +155,7 @@
     },
     {
       "parameters": {
-        "functionCode": "// Get data from all previous nodes\nconst allInputs = $input.all();\n\n// Initialize data containers\nlet marketData = {\n  aspi: 'N/A',\n  sl20: 'N/A', \n  holdings: [],\n  usdLkr: 'N/A'\n};\nlet newsData = [];\nlet oilData = 'No oil data available';\nlet debugInfo = [];\n\nconsole.log('Aggregate Data - Processing', allInputs.length, 'inputs');\n\n// Process all inputs\nfor (let i = 0; i < allInputs.length; i++) {\n  const input = allInputs[i];\n  const data = input.json;\n  \n  if (!data) continue;\n  \n  debugInfo.push(`Input ${i}: ${Object.keys(data).join(', ')}`);\n  console.log(`Input ${i}:`, Object.keys(data));\n  \n  // Market data (from Parse CBSL Data)\n  if (data.aspi !== undefined || data.sl20 !== undefined || data.usdLkr !== undefined) {\n    marketData = {\n      aspi: data.aspi || marketData.aspi,\n      sl20: data.sl20 || marketData.sl20,\n      holdings: data.holdings || marketData.holdings,\n      usdLkr: data.usdLkr || marketData.usdLkr\n    };\n    console.log('Found market data - ASPI:', marketData.aspi, 'Holdings:', marketData.holdings.length);\n    debugInfo.push('Found market data');\n  }\n  \n  // RSS News data (parsed RSS)\n  if (data.items && Array.isArray(data.items)) {\n    newsData = data.items\n      .map(item => item.title || item.description || 'No title')\n      .filter(title => title && title !== 'No title')\n      .slice(0, 10);\n    console.log('Found RSS news data:', newsData.length, 'items');\n    debugInfo.push(`Found ${newsData.length} news items`);\n  }\n  \n  // Oil/Finance data (HTTP response with XML)\n  if (data.body && typeof data.body === 'string') {\n    if (data.body.includes('<rss') || data.body.includes('<?xml')) {\n      // This is RSS XML, try to extract some headlines\n      try {\n        const titleMatches = data.body.match(/<title>(.*?)<\\/title>/gi);\n        if (titleMatches && titleMatches.length > 1) {\n          // Skip first title (usually channel title)\n          const titles = titleMatches.slice(1, 6).map(match => \n            match.replace(/<\\/?title>/gi, '').trim()\n          );\n          oilData = `Financial News Headlines: ${titles.join(' | ')}`;\n          debugInfo.push('Parsed RSS XML for financial news');\n        } else {\n          oilData = 'RSS feed received but no headlines extracted';\n        }\n      } catch (error) {\n        oilData = 'RSS XML parsing failed: ' + error.message;\n      }\n    } else {\n      oilData = data.body.substring(0, 500) + '...';\n    }\n    console.log('Found oil/finance data');\n  } else if (data.data && typeof data.data === 'string') {\n    oilData = data.data.substring(0, 500) + '...';\n    console.log('Found oil/finance data (data field)');\n  }\n}\n\n// Ensure minimum data\nif (newsData.length === 0) {\n  newsData = ['No news available from RSS feeds'];\n}\n\n// Create result\nconst result = {\n  date: new Date().toISOString().split('T')[0],\n  aspi: marketData.aspi,\n  sl20: marketData.sl20,\n  holdings: marketData.holdings,\n  usdLkr: marketData.usdLkr,\n  news: newsData,\n  oilFeed: oilData,\n  debug: debugInfo\n};\n\nconsole.log('Aggregate result:', result);\nreturn [{ json: result }];"
+        "functionCode": "// Get data from all previous nodes\nconst allInputs = $input.all();\n\n// Initialize data containers\nlet marketData = {\n  aspi: 'N/A',\n  sl20: 'N/A',\n  holdings: [],\n  usdLkr: 'N/A'\n};\nlet newsData = [];\nlet oilData = 'No oil data available';\n\n// Process all inputs\nfor (const input of allInputs) {\n  const data = input.json;\n  \n  if (!data) continue;\n  \n  // Market data (from Parse CBSL Data node)\n  if (data.aspi !== undefined || data.sl20 !== undefined || data.usdLkr !== undefined) {\n    marketData = {\n      aspi: data.aspi || marketData.aspi,\n      sl20: data.sl20 || marketData.sl20,\n      holdings: data.holdings || marketData.holdings,\n      usdLkr: data.usdLkr || marketData.usdLkr\n    };\n  }\n  \n  // RSS News data\n  if (data.items && Array.isArray(data.items)) {\n    newsData = data.items\n      .map(item => {\n        return item.title || item.description || item.link || 'No title';\n      })\n      .filter(title => title && title !== 'No title')\n      .slice(0, 10);\n  }\n  \n  // Oil/Yahoo finance data (HTTP response)\n  if (data.body && typeof data.body === 'string') {\n    oilData = data.body.substring(0, 500) + '...'; // Truncate for brevity\n  } else if (data.data && typeof data.data === 'string') {\n    oilData = data.data.substring(0, 500) + '...';\n  }\n}\n\n// Ensure we have at least some news\nif (newsData.length === 0) {\n  newsData = ['No news available from RSS feeds'];\n}\n\n// Create aggregated data\nconst aggregatedData = {\n  date: new Date().toISOString().split('T')[0],\n  aspi: marketData.aspi,\n  sl20: marketData.sl20,\n  holdings: marketData.holdings,\n  usdLkr: marketData.usdLkr,\n  news: newsData,\n  oilFeed: oilData,\n  debug: {\n    marketDataFound: marketData.aspi !== 'N/A' || marketData.sl20 !== 'N/A',\n    newsCount: newsData.length,\n    holdingsCount: marketData.holdings.length,\n    inputsProcessed: allInputs.length\n  }\n};\n\nconsole.log('Aggregated data:', JSON.stringify(aggregatedData, null, 2));\nreturn [{ json: aggregatedData }];"
       },
       "id": "86151487-8e91-4001-ae11-88ce14b292f1",
       "name": "Aggregate Data",
@@ -135,40 +165,12 @@
     },
     {
       "parameters": {
-        "model": "gpt-3.5-turbo",
-        "messages": {
-          "values": [
-            {
-              "content": "=You are a Sri Lankan stock market analyst. Generate a daily market summary in JSON format.\n\nData Provided:\n- Date: {{ $json.date }}\n- ASPI: {{ $json.aspi }}\n- SL20: {{ $json.sl20 }}\n- USD/LKR: {{ $json.usdLkr }}\n- Holdings: {{ JSON.stringify($json.holdings) }}\n- News Headlines: {{ JSON.stringify($json.news) }}\n- Market Feed: {{ $json.oilFeed }}\n\nAnalyze the data and provide insights in this exact JSON format:\n{\n  \"BigNewsEvents\": \"Brief summary of major news affecting markets\",\n  \"GlobalMacro\": \"Global economic factors and USD/LKR impact\",\n  \"HoldingsImpact\": \"Analysis of how today's movements affect the portfolio holdings\",\n  \"VolumeAnomalies\": \"Note any unusual trading volumes or patterns\",\n  \"SuggestedAction\": \"Specific actionable recommendations\",\n  \"MarketMood\": \"Overall market sentiment (Bullish/Bearish/Neutral)\"\n}\n\nRespond only with valid JSON, no additional text.",
-              "role": "user"
-            }
-          ]
-        },
-        "options": {
-          "temperature": 0.7,
-          "maxTokens": 1000
-        }
-      },
-      "type": "n8n-nodes-base.openAi",
-      "typeVersion": 1.3,
-      "position": [2340, -60],
-      "id": "c8817587-bf3f-4782-92da-d02c45a54b6a",
-      "name": "OpenAI Analysis",
-      "credentials": {
-        "openAiApi": {
-          "id": "NJfVAzn5HBnIw8k8",
-          "name": "OpenAi account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "functionCode": "// Parse the OpenAI response\nconst aiResponse = $input.first().json;\n\ntry {\n  let parsedData;\n  \n  // Handle different response formats\n  if (aiResponse.choices && aiResponse.choices[0]) {\n    // OpenAI API format\n    const content = aiResponse.choices[0].message?.content || aiResponse.choices[0].text;\n    parsedData = JSON.parse(content);\n  } else if (aiResponse.content) {\n    // Direct content format\n    parsedData = JSON.parse(aiResponse.content);\n  } else if (typeof aiResponse === 'string') {\n    // String response\n    parsedData = JSON.parse(aiResponse);\n  } else {\n    // Already parsed object\n    parsedData = aiResponse;\n  }\n  \n  // Ensure all required fields exist\n  const result = {\n    BigNewsEvents: parsedData.BigNewsEvents || 'No major events identified',\n    GlobalMacro: parsedData.GlobalMacro || 'No global macro analysis available',\n    HoldingsImpact: parsedData.HoldingsImpact || 'Holdings impact analysis not available',\n    VolumeAnomalies: parsedData.VolumeAnomalies || 'Volume analysis skipped',\n    SuggestedAction: parsedData.SuggestedAction || 'No specific action recommended',\n    MarketMood: parsedData.MarketMood || 'Neutral'\n  };\n  \n  return [{ json: result }];\n  \n} catch (error) {\n  // Fallback response if parsing fails\n  return [{ json: {\n    BigNewsEvents: `Error parsing AI response: ${error.message}`,\n    GlobalMacro: 'Analysis unavailable due to parsing error',\n    HoldingsImpact: 'Portfolio analysis unavailable',\n    VolumeAnomalies: 'Volume analysis skipped',\n    SuggestedAction: 'Manual review recommended due to system error',\n    MarketMood: 'Unknown'\n  } }];\n}"
       },
       "id": "b32287bc-9f61-44c6-a259-429a777637f3",
       "name": "Parse AI Response",
       "type": "n8n-nodes-base.function",
-      "position": [2560, -60],
+      "position": [2716, -60],
       "typeVersion": 1
     },
     {
@@ -258,12 +260,40 @@
       "id": "b24e8b95-bde1-4b75-b779-abf0260da517",
       "name": "Append to Notion",
       "type": "n8n-nodes-base.notion",
-      "position": [2780, -60],
+      "position": [2936, -60],
       "typeVersion": 2.2,
       "credentials": {
         "notionApi": {
           "id": "soni92ZX7loCkgCa",
           "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-3.5-turbo",
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a Sri Lankan stock market analyst. Generate a daily market summary in JSON format.\n\nData Provided:\n- Date: {{ $json.date }}\n- ASPI: {{ $json.aspi }}\n- SL20: {{ $json.sl20 }}\n- USD/LKR: {{ $json.usdLkr }}\n- Holdings: {{ JSON.stringify($json.holdings) }}\n- News Headlines: {{ JSON.stringify($json.news) }}\n- Market Feed: {{ $json.oilFeed }}\n\nAnalyze the data and provide insights in this exact JSON format:\n{\n  \"BigNewsEvents\": \"Brief summary of major news affecting markets\",\n  \"GlobalMacro\": \"Global economic factors and USD/LKR impact\",\n  \"HoldingsImpact\": \"Analysis of how today's movements affect the portfolio holdings\",\n  \"VolumeAnomalies\": \"Note any unusual trading volumes or patterns\",\n  \"SuggestedAction\": \"Specific actionable recommendations\",\n  \"MarketMood\": \"Overall market sentiment (Bullish/Bearish/Neutral)\"\n}\n\nRespond only with valid JSON, no additional text.",
+              "role": "user"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 1000
+        }
+      },
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.3,
+      "position": [2340, -60],
+      "id": "c8817587-bf3f-4782-92da-d02c45a54b6a",
+      "name": "OpenAI Analysis",
+      "credentials": {
+        "openAiApi": {
+          "id": "NJfVAzn5HBnIw8k8",
+          "name": "OpenAi account"
         }
       }
     },
