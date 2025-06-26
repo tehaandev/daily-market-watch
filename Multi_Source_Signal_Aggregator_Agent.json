@@ -1,0 +1,458 @@
+{
+  "name": "Multi-Source Signal Aggregator Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "0fb523b4-8bda-4988-ab5f-63301ba85cb8",
+        "options": {
+          "responseData": ""
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        -120
+      ],
+      "id": "04958a13-6ac8-4a79-932d-5f450abecb55",
+      "name": "Webhook",
+      "webhookId": "0fb523b4-8bda-4988-ab5f-63301ba85cb8"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": " 0 9 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -120,
+        555
+      ],
+      "id": "42f81cc9-faf5-409a-9f59-03bf63eb4872",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://www.adaderana.lk/rss.php",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        130
+      ],
+      "id": "15863583-2f7a-44ce-8733-97104691e264",
+      "name": "AdaDerana RSS Read"
+    },
+    {
+      "parameters": {
+        "url": "https://lankabizz.net/feed/",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        -70
+      ],
+      "id": "26fd9945-7dd4-4e95-b1f1-6bc5600f31c5",
+      "name": "LankaBizz RSS Read",
+      "retryOnFail": false,
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "url": "https://economynext.com/feed/",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        330
+      ],
+      "id": "0280f06f-f089-4b96-8f70-81d299c222e8",
+      "name": "EconomyNext RSS Read"
+    },
+    {
+      "parameters": {
+        "batchSize": 20,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        760,
+        205
+      ],
+      "id": "72967817-df9c-46b6-b5c2-5d7d79616d56",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-nano",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-NANO"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $json.messages[0].content }}",
+              "role": "system"
+            },
+            {
+              "content": "={{ $json.messages[1].content}}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1200,
+        230
+      ],
+      "id": "ea761b31-bc79-487e-8f43-45ed48233550",
+      "name": "OpenAI",
+      "credentials": {
+        "openAiApi": {
+          "id": "NJfVAzn5HBnIw8k8",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "7503230419",
+        "text": "={{ $json.message }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1576,
+        30
+      ],
+      "id": "19bf3b26-f1c6-41ab-a8e7-9d5695bfa207",
+      "name": "Telegram",
+      "webhookId": "9618e22a-2000-4596-9684-0493d2aa99c2",
+      "credentials": {
+        "telegramApi": {
+          "id": "wr12gUyGXuhg7Sao",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const feeds = $input.all(); // 3 RSS nodes → merged\nconsole.log(feeds.length)\nconst articles = feeds.map(feed => {\n  const json = feed.json;\n  const source = json.link.includes(\"lankabizz\")\n    ? \"LankaBizz\"\n    : json.link.includes(\"economynext\")\n    ? \"EconomyNext\"\n    : json.link.includes(\"adaderana\")\n    ? \"AdaDerana\"\n    : \"Unknown\";\n\n  return {\n    title: json.title?.trim() || \"\",\n    link: json.link?.trim() || \"\",\n    pubDate: json.isoDate || json.pubDate || \"\",\n    description: json.contentSnippet || json.content || \"\",\n    source\n  };\n});\n\nreturn articles.map(a => ({ json: a }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        205
+      ],
+      "id": "c352b062-e6cf-453f-bb1f-225dc9c11da8",
+      "name": "Merge RSS Feeds"
+    },
+    {
+      "parameters": {
+        "jsCode": "const articles = $input.all();\n\nconst formattedArticles = articles.map((item, i) => {\n  const { title, description } = item.json;\n  return `${i + 1}. Title: \"${title}\"\\nContent: \"${description}\"`;\n}).join(\"\\n\\n\");\n\nconst systemMessage = `You are a financial analyst focused on the Colombo Stock Exchange (CSE). For each article, extract:\n- sectors (e.g., [\"ENERGY, CAPITAL GOODS\"]) (Based off the GICS classification)\n- category: Earnings, Insider, Macro, General, Regulatory\n- relevance: 1–10\n- sentiment: Positive/Neutral/Negative\n- summary: 1–2 sentences`;\n\nconst userMessage = `Articles:\\n\\n${formattedArticles}\\n\\nRespond in this JSON format: [ {...}, {...} ]`;\n\nreturn [\n  {\n    json: {\n      messages: [\n        { role: \"system\", content: systemMessage },\n        { role: \"user\", content: userMessage }\n      ]\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        230
+      ],
+      "id": "46bc0627-717f-4b95-8850-b9930e2cac69",
+      "name": "Format OpenAI Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed = $input.all()?.[0].json.message.content\n\nif (!parsed.articles || !Array.isArray(parsed.articles)) {\n  throw new Error(\"Parsed response is missing 'articles' array:\\n\" + JSON.stringify(parsed));\n}\n\nconst results = parsed.articles\n  .filter(signal => signal.relevance >= 7)\n  .map(signal => {\n  // const tickers = signal.tickers?.join(\", \") || \"NONE\";\n  const sectors = signal.sectors?.join(\", \") || \"N/A\";\n  const category = signal.category || \"Unknown\";\n  const relevance = signal.relevance ?? \"-\";\n  const sentiment = signal.sentiment || \"Neutral\";\n  const summary = signal.summary || \"\";\n  const title = signal.title || \"\";\n\n  const message = `📈 (${sectors})\\n🗂️ ${category} | 💬 ${sentiment} | 📊 Relevance: ${relevance}\\n📌 ${title}\\n📝 ${summary}`;\n\n  return {\n    json: {\n      message,\n      sectors: signal.sectors,\n      relevance: signal.relevance,\n      category: signal.category,\n      sentiment: signal.sentiment,\n      summary: signal.summary,\n      title: signal.title\n    }\n  };\n});\n\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1576,
+        305
+      ],
+      "id": "d2f5bedc-eb4d-49c0-af11-7806cd423d3b",
+      "name": "Parse, Filter and Format for Telegram"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fullMessage = $input.all()[0].json.message\nconst chunkSize = 4000; // keep margin for Markdown formatting\n\nif (!fullMessage) {\n  return []; // no message to send\n}\n\nconst chunks = [];\n\nfor (let i = 0; i < fullMessage.length; i += chunkSize) {\n  chunks.push(fullMessage.slice(i, i + chunkSize));\n}\n\nreturn chunks.map(chunk => ({\n  json: {\n    message: chunk\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1278,
+        30
+      ],
+      "id": "b732a7b4-d860-4d7c-918b-04b5dd0059f0",
+      "name": "Chunk Telegram Message"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allSignals = $input.all().flatMap(item => item.json); // flatten array\n\nif (allSignals.length === 0) {\n  return []; // nothing to send\n}\n\nlet grouped = {}; // by sector\n\nfor (const signal of allSignals) {\n  const sectors = signal.sectors?.length ? signal.sectors : ['Unclassified'];\n\n  for (const sector of sectors) {\n    if (!grouped[sector]) grouped[sector] = [];\n    grouped[sector].push(signal);\n  }\n}\n\nlet finalMessage = `📊 *CSE Market Signals* (${new Date().toLocaleDateString()})\\n\\n`;\n\nfor (const [sector, signals] of Object.entries(grouped)) {\n  finalMessage += `📁 *${sector.toUpperCase()}*\\n`;\n  for (const s of signals) {\n    finalMessage += `• ${s.category} (${s.sentiment}) – ${s.summary}\\n`;\n  }\n  finalMessage += `\\n`;\n}\n\nreturn [\n  {\n    json: {\n      message: finalMessage.trim()\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        30
+      ],
+      "id": "d111a2ca-8a4c-437b-9006-b8afcf098c5c",
+      "name": "Build Final Telegram Message"
+    },
+    {
+      "parameters": {
+        "url": "https://www.dailymirror.lk/rss/business_24_7/395",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        530
+      ],
+      "id": "32b18e5e-afa4-4bda-a793-41b3cf0eefde",
+      "name": "RSS Read"
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        320,
+        184
+      ],
+      "id": "9a7e392b-e5cf-4cb7-8edf-faae0b18c53b",
+      "name": "Append Reads"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "LankaBizz RSS Read",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AdaDerana RSS Read",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "EconomyNext RSS Read",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AdaDerana RSS Read": {
+      "main": [
+        [
+          {
+            "node": "Append Reads",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "LankaBizz RSS Read",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AdaDerana RSS Read",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "EconomyNext RSS Read",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LankaBizz RSS Read": {
+      "main": [
+        [
+          {
+            "node": "Append Reads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EconomyNext RSS Read": {
+      "main": [
+        [
+          {
+            "node": "Append Reads",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Build Final Telegram Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format OpenAI Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Parse, Filter and Format for Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge RSS Feeds": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format OpenAI Input": {
+      "main": [
+        [
+          {
+            "node": "OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse, Filter and Format for Telegram": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunk Telegram Message": {
+      "main": [
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Final Telegram Message": {
+      "main": [
+        [
+          {
+            "node": "Chunk Telegram Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Read": {
+      "main": [
+        [
+          {
+            "node": "Append Reads",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Append Reads": {
+      "main": [
+        [
+          {
+            "node": "Merge RSS Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Colombo",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "ac6d116f-70c3-44c4-8603-2d346a0a158e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9230f62950cb0a89b0f2a1188fbbad89520c9e8729b666def59e96e369eed24e"
+  },
+  "id": "KBUYUJ2sK7BNiNuK",
+  "tags": []
+}
